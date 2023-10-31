@@ -3,26 +3,53 @@ import { useEffect, useState } from "react";
 import supabaseClient from "../wrappers/supabase-client";
 import { generateRandomName } from "@/lib/utils";
 import ThemeSwitch from "@/components/theme-switch";
-import { RealtimePresence, RealtimePresenceState } from "@supabase/supabase-js";
+import { RealtimePresenceState } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 
 type User = {
-  id: string;
+  user_id: string;
   username: string;
+  join_time: string;
 };
 
 const userId = nanoid();
-
+const userName = generateRandomName();
 export default function Home() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
 
   useEffect(() => {
     const roomOne = supabaseClient.channel("room-one");
 
+    const handleJoin = ({ newPresences }: RealtimePresenceState) => {
+      setUsers((prevUsers) => {
+        const updatedUsers = [...prevUsers];
+        newPresences.forEach((presence: any) => {
+          const newUser: User = {
+            user_id: presence.user_id,
+            username: presence.username,
+            join_time: presence.join_time,
+          };
+          updatedUsers.push(newUser);
+        });
+        return updatedUsers;
+      });
+    };
+
+    const handleLeave = ({ leftPresences }: RealtimePresenceState) => {
+      setUsers((prevUsers) => {
+        const updatedUsers = prevUsers.filter(
+          (user) =>
+            !leftPresences.some(
+              (leftPresence: any) => leftPresence.user_id === user.user_id
+            )
+        );
+        return updatedUsers;
+      });
+    };
+
     roomOne
-      .on("presence", { event: "join" }, ({ key, newPresences }) => {
-        console.log("join", key, newPresences);
-      })
+      .on("presence", { event: "join" }, handleJoin)
+      .on("presence", { event: "leave" }, handleLeave)
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") {
           return;
@@ -31,6 +58,7 @@ export default function Home() {
         await roomOne.track({
           message: "joined",
           user_id: userId,
+          username: userName,
           join_time: new Date().toLocaleTimeString(),
         });
       });
@@ -39,6 +67,7 @@ export default function Home() {
       roomOne && supabaseClient.removeChannel(roomOne);
     };
   }, []);
+
   return (
     <main className="relative flex w-screen h-screen max-h-screen p-4 overflow-hidden">
       <div
@@ -57,8 +86,8 @@ export default function Home() {
           <div className="w-20 h-20 bg-blue-400">chatbox</div>
           <div className="">
             List of online users:
-            {users.map((user) => (
-              <div key={user.id}>{user.username}</div>
+            {users.map((user, ind) => (
+              <div key={ind}>{user.username}</div>
             ))}
           </div>
         </div>
