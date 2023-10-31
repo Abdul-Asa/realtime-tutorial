@@ -20,7 +20,7 @@ export default function Home() {
   useEffect(() => {
     const roomOne = supabaseClient.channel("room-one");
 
-    const handleJoin = ({ newPresences }: RealtimePresenceState) => {
+    const handleJoin = ({ newPresences }: any) => {
       setUsers((prevUsers) => {
         const updatedUsers = [...prevUsers];
         newPresences.forEach((presence: any) => {
@@ -35,7 +35,7 @@ export default function Home() {
       });
     };
 
-    const handleLeave = ({ leftPresences }: RealtimePresenceState) => {
+    const handleLeave = ({ leftPresences }: any) => {
       setUsers((prevUsers) => {
         const updatedUsers = prevUsers.filter(
           (user) =>
