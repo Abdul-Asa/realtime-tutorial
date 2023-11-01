@@ -1,21 +1,14 @@
 "use client";
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import supabaseClient from "../wrappers/supabase-client";
 import { generateRandomName } from "@/lib/utils";
 import ThemeSwitch from "@/components/theme-switch";
 import { nanoid } from "nanoid";
-import _ from "lodash";
 import { useMousePosition } from "@/lib/hooks/use-mouse";
-import { on } from "events";
-import { set } from "lodash";
-type User = {
-  user_id: string;
-  username: string;
-  join_time: string;
-};
 
 const userId = nanoid();
 const localName = generateRandomName();
+
 export default function Home() {
   const [users, setUsers] = useState<any[]>([]);
   const [myJoinTime, setMyJoinTime] = useState<any>(
@@ -27,6 +20,8 @@ export default function Home() {
   const [cursorPositions, setCursorPositions] = useState<{
     [key: string]: { x: number; y: number; username: string };
   }>({});
+  const [latency, setLatency] = useState(0);
+  const [count, setCount] = useState(0);
 
   useEffect(() => {
     const onlineChannel = supabaseClient.channel("online");
@@ -66,8 +61,38 @@ export default function Home() {
       });
     };
 
+    const pingChannel = supabaseClient.channel(`ping:${userId}`, {
+      config: { broadcast: { ack: true } },
+    });
+
+    pingChannel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        const pingIntervalId = setInterval(async () => {
+          const start = performance.now();
+          const resp = await pingChannel.send({
+            type: "broadcast",
+            event: "PING",
+            payload: {},
+          });
+
+          if (resp === "ok") {
+            const end = performance.now();
+            const newLatency = end - start;
+            setLatency(newLatency);
+          } else {
+            console.log("pingChannel broadcast error");
+            setLatency(-1);
+          }
+        }, 500);
+
+        return () => clearInterval(pingIntervalId);
+      }
+    });
+
     return () => {
       onlineChannel.unsubscribe();
+      pingChannel.unsubscribe();
+      supabaseClient.removeChannel(pingChannel);
       supabaseClient.removeChannel(onlineChannel);
     };
   }, []);
@@ -102,7 +127,7 @@ export default function Home() {
       cursorChannel.unsubscribe();
       supabaseClient.removeChannel(cursorChannel);
     };
-  }, [x, y]);
+  }, [newUsername, x, y]);
 
   useEffect(() => {
     if (users.length === 0) return;
@@ -119,6 +144,75 @@ export default function Home() {
     }
     sendNameChange.current?.(newUsername);
   };
+  const handleChange = async (operation: "add" | "minus") => {
+    // Fetch the current counter value from Supabase
+    const { data, error } = await supabaseClient
+      .from("counter")
+      .select("value")
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    // Determine the new counter value based on the operation
+    const currentCounterValue = data?.value ?? 0;
+    const newCounterValue =
+      operation === "add" ? currentCounterValue + 1 : currentCounterValue - 1;
+
+    // Update the counter value in Supabase
+    const updateResponse = await supabaseClient
+      .from("counter")
+      .update({ value: newCounterValue })
+      .match({ id: 1 }); // Assuming your counter has an id of 1
+
+    console.log(updateResponse);
+    if (updateResponse.error) {
+      console.error(updateResponse.error);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch the initial counter value from Supabase when the component mounts
+    const fetchCounterValue = async () => {
+      let { data, error } = await supabaseClient
+        .from("counter")
+        .select("value")
+        .single();
+
+      if (error) {
+        console.error(error);
+      } else {
+        setCount(data?.value ?? 0);
+      }
+    };
+    fetchCounterValue();
+
+    // Set up a Supabase real-time subscription to listen for changes to the counter value
+    const changes = supabaseClient
+      .channel("schema-db-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE", // Listen only to UPDATEs
+          schema: "public",
+          table: "counter",
+        },
+        (payload) => {
+          console.log(payload);
+          // Update the counter state if the counter value in the database changes
+          if (payload.new && payload.new.value !== undefined) {
+            setCount(payload.new.value);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(changes);
+    };
+  }, []);
 
   return (
     <main className="relative flex w-screen h-screen max-h-screen p-4 overflow-hidden">
@@ -149,7 +243,11 @@ export default function Home() {
             {users.map((user) => (
               <p
                 key={user.user_id}
-                className={user.user_id === userId ? "text-green-200" : ""}
+                className={
+                  user.user_id === userId
+                    ? "text-green-900 dark:text-green-200"
+                    : ""
+                }
               >
                 {user.username} joined at: {user.join_time}
               </p>
@@ -160,11 +258,28 @@ export default function Home() {
           <p>
             my position: {x} and {y}
           </p>
+          <div className="flex items-center gap-4">
+            <button
+              className="relative px-4 py-2 text-white bg-blue-500 rounded-full"
+              onClick={() => handleChange("add")}
+            >
+              Add
+            </button>
+            <span className="flex items-center justify-center w-6 h-6 text-xs text-white bg-red-500 rounded-full">
+              {count}
+            </span>
+            <button
+              className="relative px-4 py-2 text-white bg-blue-500 rounded-full"
+              onClick={() => handleChange("minus")}
+            >
+              Subtract
+            </button>
+          </div>
         </div>
         <div className="flex items-end justify-between">
           <div className="flex items-center space-x-4">
             <ThemeSwitch />
-            <p>Latency: 10ms</p>
+            <p>Latency: {latency.toFixed(1)}ms</p>
           </div>
           <div className="flex justify-end">
             <p>Design by Shehu</p>
@@ -186,3 +301,8 @@ export default function Home() {
     </main>
   );
 }
+
+
+
+
+
