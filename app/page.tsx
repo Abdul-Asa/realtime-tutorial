@@ -4,7 +4,7 @@ import supabaseClient from "../wrappers/supabase-client";
 import { generateRandomName } from "@/lib/utils";
 import ThemeSwitch from "@/components/theme-switch";
 import { nanoid } from "nanoid";
-// import _ from "lodash";
+import _ from "lodash";
 import { useMousePosition } from "@/lib/hooks/use-mouse";
 import { on } from "events";
 import { set } from "lodash";
@@ -22,9 +22,11 @@ export default function Home() {
     new Date().toLocaleTimeString()
   );
   const [newUsername, setNewUsername] = useState<string>(localName);
-  // const [initialSync, setInitialSync] = useState<boolean>(false);
   const { x, y } = useMousePosition();
   const sendNameChange = useRef<(updName: string) => void>();
+  const [cursorPositions, setCursorPositions] = useState<{
+    [key: string]: { x: number; y: number };
+  }>({});
 
   useEffect(() => {
     const onlineChannel = supabaseClient.channel("online");
@@ -56,7 +58,6 @@ export default function Home() {
       });
     };
 
-    // setInitialSync(true);
     return () => {
       onlineChannel.unsubscribe();
       supabaseClient.removeChannel(onlineChannel);
@@ -64,11 +65,51 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const cursorChannel = supabaseClient.channel("cursor");
+    cursorChannel
+      .on("broadcast", { event: "CURSOR" }, (payload) => {
+        setCursorPositions((prevPositions) => ({
+          ...prevPositions,
+          [payload.payload.user_id]: {
+            x: payload.payload.x,
+            y: payload.payload.y,
+          },
+        }));
+      })
+      .subscribe();
+
+    function logMousePosition() {
+      cursorChannel.send({
+        type: "broadcast",
+        event: "CURSOR",
+        payload: { user_id: userId, x, y },
+      });
+    }
+
+    window.addEventListener("mousemove", logMousePosition);
+
+    return () => {
+      window.removeEventListener("mousemove", logMousePosition);
+      cursorChannel.unsubscribe();
+      supabaseClient.removeChannel(cursorChannel);
+    };
+  }, [x, y]);
+
+  useEffect(() => {
     if (users.length === 0) return;
     const myUser = users.find((user) => user.user_id === userId);
     if (!myUser) return;
     setMyJoinTime(myUser.join_time);
   }, [users]);
+
+  const handleNameChange = () => {
+    const isNameTaken = users.some((user) => user.username === newUsername);
+    if (isNameTaken) {
+      alert("Name is taken");
+      return;
+    }
+    sendNameChange.current?.(newUsername);
+  };
 
   return (
     <main className="relative flex w-screen h-screen max-h-screen p-4 overflow-hidden">
@@ -92,9 +133,7 @@ export default function Home() {
               onChange={(e) => setNewUsername(e.target.value)}
               placeholder="Enter new username"
             />
-            <button onClick={() => sendNameChange.current?.(newUsername)}>
-              Change Username
-            </button>
+            <button onClick={handleNameChange}>Change Username</button>
           </div>
           <div className="">
             List of online users:
@@ -123,6 +162,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+      {Object.entries(cursorPositions).map(([user_id, position]) => (
+        <div
+          key={user_id}
+          className="absolute w-4 h-4 bg-red-400 rounded-full"
+          style={{
+            left: position.x,
+            top: position.y,
+          }}
+        >
+          <p className="">{user_id}</p>
+        </div>
+      ))}
     </main>
   );
 }
