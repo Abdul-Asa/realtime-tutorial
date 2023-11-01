@@ -25,7 +25,7 @@ export default function Home() {
   const { x, y } = useMousePosition();
   const sendNameChange = useRef<(updName: string) => void>();
   const [cursorPositions, setCursorPositions] = useState<{
-    [key: string]: { x: number; y: number };
+    [key: string]: { x: number; y: number; username: string };
   }>({});
 
   useEffect(() => {
@@ -35,6 +35,14 @@ export default function Home() {
         const state = onlineChannel.presenceState();
         const presences = Object.values(state);
         setUsers(presences.flat());
+      })
+      .on("presence", { event: "leave" }, ({ leftPresences }) => {
+        console.log(leftPresences[0].user_id);
+        setCursorPositions((prevPositions) => {
+          const updatedPositions = { ...prevPositions };
+          delete updatedPositions[leftPresences[0].user_id]; // Remove the cursor position for the user who left
+          return updatedPositions;
+        });
       })
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") {
@@ -71,6 +79,7 @@ export default function Home() {
         setCursorPositions((prevPositions) => ({
           ...prevPositions,
           [payload.payload.user_id]: {
+            username: payload.payload.username,
             x: payload.payload.x,
             y: payload.payload.y,
           },
@@ -82,7 +91,7 @@ export default function Home() {
       cursorChannel.send({
         type: "broadcast",
         event: "CURSOR",
-        payload: { user_id: userId, x, y },
+        payload: { user_id: userId, x, y, username: newUsername },
       });
     }
 
@@ -165,13 +174,13 @@ export default function Home() {
       {Object.entries(cursorPositions).map(([user_id, position]) => (
         <div
           key={user_id}
-          className="absolute w-4 h-4 bg-red-400 rounded-full"
+          className="absolute w-4 h-4 bg-red-400 rounded-full select-none"
           style={{
             left: position.x,
             top: position.y,
           }}
         >
-          <p className="">{user_id}</p>
+          <p className="absolute left-5 top-2">{position.username}</p>
         </div>
       ))}
     </main>
