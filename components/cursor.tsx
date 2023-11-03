@@ -15,8 +15,7 @@ interface Props {
 
 const MAX_MESSAGE_LENGTH = 70;
 const MAX_DURATION = 4000;
-const MAX_BUBBLE_WIDTH_THRESHOLD = 280 + 50;
-const MAX_BUBBLE_HEIGHT_THRESHOLD = 40 + 50;
+
 
 const Cursor: FC<Props> = ({
   x,
@@ -36,8 +35,6 @@ const Cursor: FC<Props> = ({
   const timeoutRef = useRef() as any;
   const chatBubbleRef = useRef() as any;
 
-  const [flipX, setFlipX] = useState(false);
-  const [flipY, setFlipY] = useState(false);
   const [hideInput, setHideInput] = useState(false);
   const [showMessageBubble, setShowMessageBubble] = useState(false);
 
@@ -64,21 +61,16 @@ const Cursor: FC<Props> = ({
     }
   }, [isLocalClient, isTyping, isCancelled, message, inputRef]);
 
-  useEffect(() => {
-    setFlipX((x || 0) + MAX_BUBBLE_WIDTH_THRESHOLD >= window.innerWidth);
-    setFlipY((y || 0) + MAX_BUBBLE_HEIGHT_THRESHOLD >= window.innerHeight);
-  }, [x, y, isTyping, chatBubbleRef]);
-
   return (
     <>
-      {!_isLocalClient && (
-        <div
-          className="absolute transition-all duration-300 ease-linear -translate-x-1/2 -translate-y-1/2"
-          style={{
-            left: `${x}%`,
-            top: `${y}%`,
-          }}
-        >
+      <div
+        className="absolute transition-all duration-300 ease-linear -translate-x-1/2 -translate-y-1/2"
+        style={{
+          left: `${x}%`,
+          top: `${y}%`,
+        }}
+      >
+        {!_isLocalClient && (
           <svg
             width="18"
             height="24"
@@ -97,14 +89,14 @@ const Cursor: FC<Props> = ({
               strokeWidth="2"
             />
           </svg>
-          <div
-            className="absolute truncate -translate-x-1/2 translate-y-full"
-            style={{ color }}
-          >
-            {username}
-          </div>{" "}
-        </div>
-      )}
+        )}
+        <div
+          className="absolute truncate -translate-x-1/2 translate-y-full"
+          style={{ color }}
+        >
+          {username}
+        </div>{" "}
+      </div>
       <div
         ref={chatBubbleRef}
         className={[

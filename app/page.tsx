@@ -10,6 +10,7 @@ import { handleChange } from "./broo";
 import { getRandomColor } from "@/lib/utils";
 import UserList from "@/components/user-list";
 import { User } from "@/lib/types";
+import { set } from "lodash";
 
 const userId = nanoid();
 const localName = generateRandomName();
@@ -22,16 +23,21 @@ export default function Home() {
     user_id: userId,
     username: localName,
     color: localColor,
+    latestMessage: "",
   });
   const [newUsername, setNewUsername] = useState<string>(localName);
+  const [message, setMessage] = useState<string>("");
   const { x, y } = useMousePosition();
+  const [isTyping, setIsTyping] = useState(false);
   const sendNameChange = useRef<(updName: string) => void>();
+  const [isCancelled, setIsCancelled] = useState<boolean>(false);
   const [cursorPositions, setCursorPositions] = useState<{
     [key: string]: {
       x: number;
       y: number;
       username: string;
       color: { bg: string; hue: string };
+      latestMessage: string;
     };
   }>({});
   const [latency, setLatency] = useState(0);
@@ -130,6 +136,7 @@ export default function Home() {
             x: payload.payload.x,
             y: payload.payload.y,
             color: payload.payload.color,
+            latestMessage: payload.payload.latestMessage,
           },
         }));
       })
@@ -145,6 +152,7 @@ export default function Home() {
           y,
           username: currentUser.username,
           color: currentUser.color,
+          latestMessage: currentUser.latestMessage,
         },
       });
     }
@@ -158,6 +166,30 @@ export default function Home() {
     };
   }, [x, y]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isTyping) {
+        setIsTyping(true);
+      }
+      if (e.code === "Enter") {
+        setIsTyping(false);
+        setIsCancelled(false);
+      }
+      if (e.code === "Escape") {
+        setIsTyping(false);
+        setIsCancelled(true);
+        setMessage("");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isTyping]);
+
+  //move to server
   useEffect(() => {
     // Fetch the initial counter value from Supabase when the component mounts
     const fetchCounterValue = async () => {
@@ -270,14 +302,17 @@ export default function Home() {
       </div>
       {Object.entries(cursorPositions).map(([user_id, position]) => (
         <Cursor
+          isLocalClient
           key={user_id}
           x={position.x}
           y={position.y}
           username={position.username}
           color={position.color.bg}
           hue={position.color.hue}
-          message={"how far?"}
-          isTyping={true}
+          message={message}
+          isTyping={isTyping}
+          isCancelled={isCancelled}
+          onUpdateMessage={setMessage}
         />
       ))}
     </main>
