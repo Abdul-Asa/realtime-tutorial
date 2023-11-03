@@ -13,7 +13,9 @@ export function useMousePosition(): MousePosition {
 
 	useEffect(() => {
 		const handleMouseMove = (event: MouseEvent) => {
-			setMousePosition({ x: event.clientX, y: event.clientY });
+			const xPercentage = (event.clientX / window.innerWidth) * 100;
+      const yPercentage = (event.clientY / window.innerHeight) * 100;
+      setMousePosition({ x: xPercentage, y: yPercentage });
 		};
 
 		window.addEventListener("mousemove", handleMouseMove);

@@ -6,33 +6,20 @@ import ThemeSwitch from "@/components/theme-switch";
 import { nanoid } from "nanoid";
 import { useMousePosition } from "@/lib/hooks/use-mouse";
 import Cursor from "@/components/cursor";
-import { handleChange } from "./broo";
-import { getRandomColor } from "@/lib/utils";
-import UserList from "@/components/user-list";
-import { User } from "@/lib/types";
 
 const userId = nanoid();
 const localName = generateRandomName();
-const localColor = getRandomColor();
 
-export default function Home() {
+export default function Room() {
   const [users, setUsers] = useState<any[]>([]);
-  const [currentUser, setCurrentUser] = useState<any>({
-    join_time: new Date().toLocaleTimeString(),
-    user_id: userId,
-    username: localName,
-    color: localColor,
-  });
+  const [myJoinTime, setMyJoinTime] = useState<any>(
+    new Date().toLocaleTimeString()
+  );
   const [newUsername, setNewUsername] = useState<string>(localName);
   const { x, y } = useMousePosition();
   const sendNameChange = useRef<(updName: string) => void>();
   const [cursorPositions, setCursorPositions] = useState<{
-    [key: string]: {
-      x: number;
-      y: number;
-      username: string;
-      color: { bg: string; hue: string };
-    };
+    [key: string]: { x: number; y: number; username: string };
   }>({});
   const [latency, setLatency] = useState(0);
   const [count, setCount] = useState(0);
@@ -44,12 +31,9 @@ export default function Home() {
         const state = onlineChannel.presenceState();
         const presences = Object.values(state);
         setUsers(presences.flat());
-        const myUser = presences
-          .flat()
-          .find((user: any) => user.user_id === userId);
-        setCurrentUser(myUser);
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
+        console.log(leftPresences[0].user_id);
         setCursorPositions((prevPositions) => {
           const updatedPositions = { ...prevPositions };
           delete updatedPositions[leftPresences[0].user_id]; // Remove the cursor position for the user who left
@@ -64,22 +48,17 @@ export default function Home() {
           user_id: userId,
           username: localName,
           join_time: new Date().toLocaleTimeString(),
-          color: localColor,
         };
         await onlineChannel.track(userStatus);
       });
 
     sendNameChange.current = async (updName) => {
-      const isColorMatch = users.some(
-        (obj) => JSON.stringify(obj.color) === JSON.stringify(currentUser.color)
-      );
-
       console.log("sending name change");
+      console.log(myJoinTime, updName);
       await onlineChannel.track({
         username: updName,
-        join_time: currentUser.join_time,
+        join_time: myJoinTime,
         user_id: userId,
-        color: isColorMatch ? getRandomColor() : currentUser.color,
       });
     };
 
@@ -129,7 +108,6 @@ export default function Home() {
             username: payload.payload.username,
             x: payload.payload.x,
             y: payload.payload.y,
-            color: payload.payload.color,
           },
         }));
       })
@@ -139,13 +117,7 @@ export default function Home() {
       cursorChannel.send({
         type: "broadcast",
         event: "CURSOR",
-        payload: {
-          user_id: userId,
-          x,
-          y,
-          username: currentUser.username,
-          color: currentUser.color,
-        },
+        payload: { user_id: userId, x, y, username: newUsername },
       });
     }
 
@@ -156,7 +128,52 @@ export default function Home() {
       cursorChannel.unsubscribe();
       supabaseClient.removeChannel(cursorChannel);
     };
-  }, [x, y]);
+  }, [newUsername, x, y]);
+
+  useEffect(() => {
+    if (users.length === 0) return;
+    const myUser = users.find((user) => user.user_id === userId);
+    if (!myUser) return;
+    setMyJoinTime(myUser.join_time);
+  }, [users]);
+
+  const handleNameChange = () => {
+    const isNameTaken = users.some((user) => user.username === newUsername);
+    if (isNameTaken) {
+      alert("Name is taken");
+      return;
+    }
+    sendNameChange.current?.(newUsername);
+  };
+
+  const handleChange = async (operation: "add" | "minus") => {
+    // Fetch the current counter value from Supabase
+    const { data, error } = await supabaseClient
+      .from("counter")
+      .select("value")
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    // Determine the new counter value based on the operation
+    const currentCounterValue = data?.value ?? 0;
+    const newCounterValue =
+      operation === "add" ? currentCounterValue + 1 : currentCounterValue - 1;
+
+    // Update the counter value in Supabase
+    const updateResponse = await supabaseClient
+      .from("counter")
+      .update({ value: newCounterValue })
+      .match({ id: 1 }); // Assuming your counter has an id of 1
+
+    console.log(updateResponse);
+    if (updateResponse.error) {
+      console.error(updateResponse.error);
+    }
+  };
 
   useEffect(() => {
     // Fetch the initial counter value from Supabase when the component mounts
@@ -185,6 +202,7 @@ export default function Home() {
           table: "counter",
         },
         (payload) => {
+          console.log(payload);
           // Update the counter state if the counter value in the database changes
           if (payload.new && payload.new.value !== undefined) {
             setCount(payload.new.value);
@@ -197,15 +215,6 @@ export default function Home() {
       supabaseClient.removeChannel(changes);
     };
   }, []);
-
-  const handleNameChange = () => {
-    const isNameTaken = users.some((user) => user.username === newUsername);
-    if (isNameTaken) {
-      alert("Name is taken");
-      return;
-    }
-    sendNameChange.current?.(newUsername);
-  };
 
   return (
     <main className="relative flex w-screen h-screen max-h-screen p-4 overflow-hidden">
@@ -233,12 +242,23 @@ export default function Home() {
           </div>
           <div className="">
             List of online users:
-            <UserList users={users as User[]} />
+            {users.map((user) => (
+              <p
+                key={user.user_id}
+                className={
+                  user.user_id === userId
+                    ? "text-green-900 dark:text-green-200"
+                    : ""
+                }
+              >
+                {user.username} joined at: {user.join_time}
+              </p>
+            ))}
           </div>
         </div>
         <div className="flex flex-col items-center justify-center">
           <p>
-            my position: {x.toFixed(1)}% and {y.toFixed(1)}%
+            my position: {x} and {y}
           </p>
           <div className="flex items-center gap-4">
             <button
@@ -274,10 +294,6 @@ export default function Home() {
           x={position.x}
           y={position.y}
           username={position.username}
-          color={position.color.bg}
-          hue={position.color.hue}
-          message={"how far?"}
-          isTyping={true}
         />
       ))}
     </main>
