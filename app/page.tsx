@@ -10,7 +10,6 @@ import { handleChange } from "./broo";
 import { getRandomColor } from "@/lib/utils";
 import UserList from "@/components/user-list";
 import { User } from "@/lib/types";
-import { set } from "lodash";
 
 const userId = nanoid();
 const localName = generateRandomName();

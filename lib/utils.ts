@@ -1,5 +1,4 @@
 import { animals, colors, uniqueNamesGenerator } from "unique-names-generator";
-import sampleSize from "lodash/sampleSize";
 
 export const generateRandomName = () => {
   return uniqueNamesGenerator({
@@ -73,23 +72,6 @@ const userColors = {
     bg: "#00ff00",
     hue: "#00ff00",
   },
-};
-
-export const getRandomUniqueColor = (currentColors: string[]) => {
-  const colorNames = Object.values(userColors).map((col) => col.bg);
-  const uniqueColors = colorNames.filter(
-    (color: string) => !currentColors.includes(color)
-  );
-  const uniqueColor =
-    uniqueColors[Math.floor(Math.random() * uniqueColors.length)];
-  const uniqueColorSet = Object.values(userColors).find(
-    (color) => color.bg === uniqueColor
-  );
-  return uniqueColorSet || getRandomColor();
-};
-
-export const getRandomColors = (qty: number) => {
-  return sampleSize(Object.values(userColors), qty);
 };
 
 export const getRandomColor = () => {
